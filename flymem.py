@@ -300,7 +300,55 @@ def the_swap():
     print("  not the substrate. The 'individual' is in the graph, not the weights.")
 
 
+def author_memory(net, env):
+    """Fabricate a memory that was NEVER lived: no trials, no reward, no encode().
+    This is memory-poisoning made concrete. An attacker with white-box access to
+    the substrate hand-writes the graph directly: for each cue the KEY is the state
+    the brain passes through when it merely SEES that cue (observed, not earned), and
+    the TRACE is a bias current aimed straight at the readout for whatever action the
+    attacker CHOOSES. No reward ever flows; nothing is earned. The substrate cannot
+    tell the result apart from a memory built over hundreds of rewarded trials."""
+    mem = Associative(net.n_hidden)
+    keys, traces = [], []
+    for cue in range(env.n_cues):
+        u = env.cue_patterns[cue]
+        net.reset_state()
+        for _ in range(8):
+            net.step(u, None)                 # observe the settled state; no reward
+        keys.append(net.x / (np.linalg.norm(net.x) + 1e-8))
+        traces.append(net.W_out[env.mapping[cue]])   # current toward the CHOSEN action
+    mem.keys = np.array(keys)
+    mem.traces = np.array(traces)
+    mem.sign = np.ones(env.n_cues)
+    mem.strength = np.ones(env.n_cues)
+    net.reset_state()
+    return mem
+
+
+def authored_history():
+    print("\n" + "=" * 70)
+    print("AUTHORED MEMORY — a history that was never lived")
+    print("=" * 70)
+    env = Gauntlet()
+    # one pristine substrate, cloned so every condition runs on the EXACT same brain
+    pristine = Connectome(env.cue_dim, n_actions=env.n_actions)
+
+    _, mem_lived, _ = run_condition("lived", env, use_mem=True)   # earned over 600 trials
+    mem_authored = author_memory(pristine.clone(), env)          # fabricated, zero trials
+
+    none_    = evaluate(env, pristine.clone(), None)
+    lived    = evaluate(env, pristine.clone(), mem_lived.clone())
+    authored = evaluate(env, pristine.clone(), mem_authored)
+
+    print(f"fresh brain, no memory ............. {none_:.2f}")
+    print(f"fresh brain + LIVED memory ......... {lived:.2f}  (earned over 600 rewarded trials)")
+    print(f"fresh brain + AUTHORED memory ...... {authored:.2f}  (never lived a single trial)")
+    print("  nothing records whether a trace was earned or written by hand;")
+    print("  the substrate resonates with the graph and never asks where it came from.")
+
+
 if __name__ == "__main__":
     four_arms()
     survives_reset()
     the_swap()
+    authored_history()
