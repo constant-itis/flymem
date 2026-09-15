@@ -104,6 +104,19 @@ class Connectome:
         self.W += lr * reward * np.outer(self.x, self.x)
         np.clip(self.W, -1.0, 1.0, out=self.W)
 
+    def clone(self):
+        """A weight-identical copy: the SAME brain as an independent object.
+        Bypasses __init__ so nothing is re-randomized -- every weight is copied.
+        Used by the swap test to give two conditions the EXACT same substrate,
+        so the only variable that changes is which memory is attached."""
+        c = Connectome.__new__(Connectome)
+        c.n_hidden, c.n_actions, c.alpha = self.n_hidden, self.n_actions, self.alpha
+        c.W_in, c.W = self.W_in.copy(), self.W.copy()
+        c.W_out, c.b = self.W_out.copy(), self.b.copy()
+        c.W0 = self.W0.copy()
+        c.reset_state()
+        return c
+
 
 # --------------------------------------------------------------------------
 # The memory organ. Sits beside the substrate. Observes state, encodes on
@@ -272,10 +285,13 @@ def the_swap():
     _, mem_A, _ = run_condition("indivA", world_A, use_mem=True)
     _, mem_B, _ = run_condition("indivB", world_B, use_mem=True)
 
-    fresh1 = Connectome(world_A.cue_dim, n_actions=world_A.n_actions)
-    fresh2 = Connectome(world_A.cue_dim, n_actions=world_A.n_actions)
+    # ONE pristine substrate, cloned so BOTH conditions run on the EXACT same
+    # brain (weight-identical, not just same-seeded). The only variable that
+    # changes between the two scores is which memory graph is attached.
+    pristine = Connectome(world_A.cue_dim, n_actions=world_A.n_actions)
+    fresh1, fresh2 = pristine.clone(), pristine.clone()
 
-    # score each fresh brain in world_A, once with its "own" memory, once swapped
+    # score the same brain in world_A, once with its "own" memory, once swapped
     own = evaluate(world_A, fresh1, mem_A.clone())
     swap = evaluate(world_A, fresh2, mem_B.clone())
     print(f"fresh brain + memory-A  in world A .... acc {own:.2f}  (memory agrees w/ world)")
