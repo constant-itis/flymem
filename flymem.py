@@ -347,8 +347,57 @@ def authored_history():
     print("  the substrate resonates with the graph and never asks where it came from.")
 
 
+def merge_memories(a, b):
+    """Merge two individuals' graphs by union: stack every trace into one memory.
+    The most literal reading of 'blend two individuals' -- no reconciliation, no
+    averaging. Both histories now live in one graph and fire together on every cue."""
+    m = Associative(a.dim, a.sim_thresh, a.gain, a.decay)
+    m.keys = np.vstack([a.keys, b.keys])
+    m.traces = np.vstack([a.traces, b.traces])
+    m.sign = np.concatenate([a.sign, b.sign])
+    m.strength = np.concatenate([a.strength, b.strength])
+    return m
+
+
+def the_merge():
+    print("\n" + "=" * 70)
+    print("THE MERGE — blend two individuals; who comes out?")
+    print("=" * 70)
+    world_A = Gauntlet()
+    world_B = Gauntlet(mapping=(world_A.mapping + 1) % world_A.n_actions,
+                       cue_patterns=world_A.cue_patterns)
+    _, mem_A, _ = run_condition("A", world_A, use_mem=True)
+    _, mem_B, _ = run_condition("B", world_B, use_mem=True)
+    merged = merge_memories(mem_A, mem_B)
+    pristine = Connectome(world_A.cue_dim, n_actions=world_A.n_actions)
+
+    print(f"mem_A .... world A {evaluate(world_A, pristine.clone(), mem_A.clone()):.2f}"
+          f"   world B {evaluate(world_B, pristine.clone(), mem_A.clone()):.2f}   (pure individual A)")
+    print(f"mem_B .... world A {evaluate(world_A, pristine.clone(), mem_B.clone()):.2f}"
+          f"   world B {evaluate(world_B, pristine.clone(), mem_B.clone()):.2f}   (pure individual B)")
+    print(f"MERGED ... world A {evaluate(world_A, pristine.clone(), merged.clone()):.2f}"
+          f"   world B {evaluate(world_B, pristine.clone(), merged.clone()):.2f}")
+
+    # what does the merged individual actually pick, cue by cue?
+    picks = {"A": 0, "B": 0, "neither": 0}
+    net, m = pristine.clone(), merged.clone()
+    for _ in range(600):
+        cue, u = world_A.sample()
+        net.reset_state()
+        for _ in range(8):
+            net.step(u, m.observe_and_modulate(net.x))
+        act = int(np.argmax(net.motor()))
+        if act == world_A.mapping[cue]:   picks["A"] += 1
+        elif act == world_B.mapping[cue]: picks["B"] += 1
+        else:                             picks["neither"] += 1
+    tot = sum(picks.values())
+    print(f"merged picks (world A cues):  A's answer {picks['A']/tot:.2f}"
+          f"   B's answer {picks['B']/tot:.2f}   neither {picks['neither']/tot:.2f}")
+
+
 if __name__ == "__main__":
     four_arms()
     survives_reset()
     the_swap()
     authored_history()
+    the_merge()
